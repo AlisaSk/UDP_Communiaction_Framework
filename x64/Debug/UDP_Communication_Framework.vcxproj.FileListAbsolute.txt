@@ -1,1 +1,2 @@
 D:\cvut_fel_oi\psia\UDP_Communication_Framework\UDP_Communication_Framework\x64\Debug\UDP_Comm.DC156D56.Up2Date
+D:\Work\Alisa\UDP_Communiaction_Framework\x64\Debug\UDP_Communication_Framework.exe
