@@ -14,7 +14,7 @@
 #include <stdio.h>
 
 // Enter the RECEIVER IP ADRESS (same on both devices)
-#define TARGET_IP	"127.0.0.1"
+#define TARGET_IP "192.168.135.126"
 #define BUFFERS_LEN 1024
 #define CRC32_LEN 4
 
