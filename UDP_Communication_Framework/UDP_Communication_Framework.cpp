@@ -14,12 +14,12 @@
 #include <stdio.h>
 
 // Enter the RECEIVER IP ADRESS (same on both devices)
-#define TARGET_IP "192.168.135.126"
+#define TARGET_IP "127.0.0.1"
 #define BUFFERS_LEN 1024
 #define CRC32_LEN 4
 
 
-#define SENDER
+#define RECEIVER
 
 
 
@@ -64,6 +64,8 @@ int main()
 	}
 
 	int i = 1;
+	char ok[1] = { '1' };
+	char not_ok[1] = { '0' };
 	//**********************************************************************
 
 
@@ -89,29 +91,40 @@ int main()
 
 	strncpy(buffer_tx, "start", BUFFERS_LEN);
 	sendto(socketS, buffer_tx, strlen(buffer_tx), 0, (sockaddr*)&addrDest, sizeof(addrDest));
-	Sleep(10000);
+
+	char response_start[1];
+	int response_len = recvfrom(socketS, response_start, sizeof(response_start), 0, (sockaddr*)&from, &fromlen);
+	while (!(response_len > 0 && response_start[0] == '1')) {}
+	Sleep(2000);
 
 
 	size_t bytes_read;
 
 	// my goals for now: ensure that the image YES and crc will be delevired
 	while ((bytes_read = fread(buffer_tx, 1, BUFFERS_LEN, file)) > 0) {
-		// create new buffer for value: buffer + counted_crc
-		char crc_buffer_s[BUFFERS_LEN + CRC32_LEN];
-		uint32_t crc_initial = countCRC(buffer_tx, bytes_read);
+		bool sent_seccesfully = false;
+		while (!sent_seccesfully) {
+			// create new buffer for value: buffer + counted_crc
+			char crc_buffer_s[BUFFERS_LEN + CRC32_LEN];
+			uint32_t crc_initial = countCRC(buffer_tx, bytes_read);
 
-		// add buffer and crc to crc_buffer_s
-		crc_initial = htonl(crc_initial);
-		memcpy(crc_buffer_s, buffer_tx, bytes_read);
-		memcpy(crc_buffer_s + bytes_read, &crc_initial, CRC32_LEN);
+			// add buffer and crc to crc_buffer_s
+			crc_initial = htonl(crc_initial);
+			memcpy(crc_buffer_s, buffer_tx, bytes_read);
+			memcpy(crc_buffer_s + bytes_read, &crc_initial, CRC32_LEN);
 
-		int total_bytes = bytes_read + CRC32_LEN;
-		sendto(socketS, crc_buffer_s, total_bytes, 0, (sockaddr*)&addrDest, sizeof(addrDest));
+			int total_bytes = bytes_read + CRC32_LEN;
+			sendto(socketS, crc_buffer_s, total_bytes, 0, (sockaddr*)&addrDest, sizeof(addrDest));
 
-		// implemantation of receiving answear
-		// 
-		// 
-		// 
+			char response[1];
+			int response_length = recvfrom(socketS, response, sizeof(response), 0, (sockaddr*)&from, &fromlen);
+			if (response_length > 0 && response[0] == '1') {
+				sent_seccesfully = true;
+			}
+			else {
+				printf("Something went wrong :( Resending package %d\n", i);
+			}
+		}
 
 		printf("Packet number %d was sent and received\n", i);
 		i++;
@@ -151,6 +164,9 @@ int main()
 			strcat(filepath, filename);
 			FILE* file = fopen(filepath, "wb");
 			printf("File %s is opened for writing.\n", filename);
+
+			sendto(socketS, "1", 1, 0, (sockaddr*)&from, fromlen); // response to start
+
 			int keep_sending = 1;
 			while (keep_sending) {
 				char crc_buffer_r[BUFFERS_LEN + CRC32_LEN];
@@ -183,22 +199,19 @@ int main()
 				crc_expected = ntohl(crc_expected);
 
 				if (crc_actual != crc_expected) {
-					printf("CRC Error in the packet %d\n", i);
-					// test[len] = i;
-					// len++;
+					printf("CRC32 Error in the packet %d !\n", i);
+					sendto(socketS, "0", 1, 0, (sockaddr*)&from, fromlen); // may cause problems because of the socketS
+				}
+				else {
+					// may cause problems because of the socketS
+					sendto(socketS, "1", 1, 0, (sockaddr*)&from, fromlen);
+					fwrite(buffer_rx, 1, buffer_len, file);
+					printf("Packet %d was received succesfully! (%d bytes)\n", i, bytes_received);
+					i++;
 				}
 
-				fwrite(buffer_rx, 1, bytes_received - CRC32_LEN, file);
-				printf("Packet %d was received succesfully! (%d bytes)\n", i, bytes_received);
-				i++;
 			}
 
-			// test CRC
-			// 
-			// printf("CRC error on lines: ");
-			// for (int t = 0; t < len; t++) {
-			//	printf("%d ", test[t]);
-			// }
 			fclose(file);
 			closesocket(socketS);
 		}
